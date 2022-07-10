@@ -748,10 +748,7 @@ class MultiheadAttention(nn.Module):
             (B, L, S) where B is the batch size, L is the target
             sequence length, S is the source sequence length.
         """
-        # give tensors of shape (time, batch, fea)
-        query = query.permute(1, 0, 2)
-        key = key.permute(1, 0, 2)
-        value = value.permute(1, 0, 2)
+        # Tensors of shape (time, batch, fea)
 
         # this will be legit because of https://github.com/pytorch/pytorch/blob/5288d05cfdda85c46c4df84617fa7f37c21b10b3/torch/nn/functional.py#L4946
         # we can inject relative learnable pos embeddings directly in MHA via the attn_mask
@@ -772,11 +769,8 @@ class MultiheadAttention(nn.Module):
 
         if return_attn_weights:
             output, attention_weights = output
-            # reshape the output back to (batch, time, fea)
-            output = output.permute(1, 0, 2)
             return output, attention_weights
         else:
-            output = output.permute(1, 0, 2)
             return output
 
 

@@ -301,7 +301,7 @@ class TransformerEncoderLayer(nn.Module):
                 dropout=dropout,
                 kdim=kdim,
                 vdim=vdim,
-                batch_first=False,
+                batch_first=True,
             )
 
         elif attention_type == "RelPosMHAXL":

@@ -588,6 +588,7 @@ class SBTransformerBlock(nn.Module):
         """
         if self.use_positional_encoding:
             pos_enc = self.pos_enc(K)
+            #pos_enc = torch.permute(pos_enc, (1,0,2))
             return self.mdl(x + pos_enc)[0]
         else:
             return self.mdl(x)[0]
@@ -841,7 +842,7 @@ class Dual_Computation_Block(nn.Module):
         # [BS, K, N]
         intra = x.permute(0, 3, 2, 1).contiguous().view(B * S, K, N)
 
-        # [BS, K, N]
+        # [K, BS, N]
         intra = self.intra_mdl(intra, K)
 
         # [BS, K, N]
@@ -862,7 +863,8 @@ class Dual_Computation_Block(nn.Module):
         # inter RNN
         # [BK, S, N]
         inter = intra.permute(0, 2, 3, 1).contiguous().view(B * K, S, N)
-        # [BK, S, N]
+
+        # [S, BK, N]
         inter = self.inter_mdl(inter, S)
 
         # [BK, S, N]
