@@ -680,6 +680,7 @@ class MultiheadAttention(nn.Module):
         add_zero_attn=False,
         kdim=None,
         vdim=None,
+        batch_first=False
     ):
         super().__init__()
 
@@ -692,6 +693,7 @@ class MultiheadAttention(nn.Module):
             add_zero_attn=add_zero_attn,
             kdim=kdim,
             vdim=vdim,
+            batch_first=batch_first
         )
 
     def forward(

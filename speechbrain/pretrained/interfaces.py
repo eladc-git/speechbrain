@@ -8,6 +8,7 @@ Authors:
  * Titouan Parcollet 2021
  * Abdel Heba 2021
 """
+import math
 import logging
 import hashlib
 import sys
@@ -1968,7 +1969,7 @@ class SepformerSeparation(Pretrained):
         """
 
         # Separation
-        mix = mix.to(self.device)
+        #mix = mix.to(self.device)
         mix_w = self.mods.encoder(mix)
         est_mask = self.mods.masknet(mix_w)
         mix_w = torch.stack([mix_w] * self.hparams.num_spks)
@@ -1983,16 +1984,9 @@ class SepformerSeparation(Pretrained):
             dim=-1,
         )
 
-        # T changed after conv1d in encoder, fix it here
-        T_origin = mix.size(1)
-        T_est = est_source.size(1)
-        if T_origin > T_est:
-            est_source = F.pad(est_source, (0, 0, 0, T_origin - T_est))
-        else:
-            est_source = est_source[:, :T_origin, :]
         return est_source
 
-    def separate_file(self, path, savedir="."):
+    def separate_file(self, path, savedir=".", chunk_size=-1):
         """Separate sources from file.
 
         Arguments
@@ -2027,10 +2021,28 @@ class SepformerSeparation(Pretrained):
             batch = batch.mean(dim=0, keepdim=True)
             batch = tf(batch)
 
-        est_sources = self.separate_batch(batch)
-        est_sources = (
-            est_sources / est_sources.abs().max(dim=1, keepdim=True)[0]
-        )
+        # Block processing
+        num_chunks = 1 if chunk_size == -1 else math.ceil(batch.shape[1]/chunk_size)
+        chunks = torch.chunk(batch,num_chunks,dim=1)
+        est_sources_list = []
+        for chunk in chunks:
+            # Run model
+            est_source = self(chunk)
+
+            # Make sure size is the same
+            T_origin = chunk.size(1)
+            T_est = est_source.size(1)
+            if T_origin > T_est:
+                est_source = F.pad(est_source, (0, 0, 0, T_origin - T_est))
+            else:
+                est_source = est_source[:, :T_origin, :]
+
+            # Normalize
+            est_source = est_source / est_source.abs().max(dim=1, keepdim=True)[0]
+            est_sources_list.append(est_source)
+
+        est_sources = torch.cat(est_sources_list,dim=1)
+
         return est_sources
 
     def forward(self, mix):

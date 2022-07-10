@@ -10,6 +10,7 @@ import pathlib
 import logging
 import huggingface_hub
 from requests.exceptions import HTTPError
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,8 @@ def fetch(
         MSG = f"Fetch {filename}: Linking to local file in {str(sourcepath)}."
         logger.info(MSG)
         _missing_ok_unlink(destination)
-        destination.symlink_to(sourcepath)
+        #destination.symlink_to(sourcepath)
+        os.link(sourcepath, destination.name) # create hard link
     else:
         # Interpret source as huggingface hub ID
         # Use huggingface hub's fancy cached download.
@@ -124,5 +126,6 @@ def fetch(
         # Huggingface hub downloads to etag filename, symlink to the expected one:
         sourcepath = pathlib.Path(fetched_file).absolute()
         _missing_ok_unlink(destination)
-        destination.symlink_to(sourcepath)
+        #destination.symlink_to(sourcepath)
+        os.link(sourcepath, destination.name) # create hard link
     return destination

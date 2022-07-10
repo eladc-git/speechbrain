@@ -14,8 +14,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import copy
 from speechbrain.nnet.linear import Linear
-from speechbrain.lobes.models.transformer.Transformer import TransformerEncoder
-from speechbrain.lobes.models.transformer.Transformer import PositionalEncoding
+from speechbrain.lobes.models.transformer.Transformer_static import TransformerEncoder
+from speechbrain.lobes.models.transformer.Transformer_static import PositionalEncoding
 import speechbrain.nnet.RNN as SBRNN
 
 
@@ -253,17 +253,11 @@ class Decoder(nn.ConvTranspose1d):
                        N = number of filters
                        L = time points
         """
+        # [B,N,L] - shape of x
+        x = super().forward(x)
+        # [1,1,Z]
+        x = torch.squeeze(x, dim=1)
 
-        if x.dim() not in [2, 3]:
-            raise RuntimeError(
-                "{} accept 3/4D tensor as input".format(self.__name__)
-            )
-        x = super().forward(x if x.dim() == 3 else torch.unsqueeze(x, 1))
-
-        if torch.squeeze(x).dim() == 1:
-            x = torch.squeeze(x, dim=1)
-        else:
-            x = torch.squeeze(x)
         return x
 
 
@@ -580,7 +574,7 @@ class SBTransformerBlock(nn.Module):
         if use_positional_encoding:
             self.pos_enc = PositionalEncoding(input_size=d_model)
 
-    def forward(self, x):
+    def forward(self, x, K):
         """Returns the transformed output.
 
         Arguments
@@ -593,7 +587,7 @@ class SBTransformerBlock(nn.Module):
 
         """
         if self.use_positional_encoding:
-            pos_enc = self.pos_enc(x)
+            pos_enc = self.pos_enc(K)
             return self.mdl(x + pos_enc)[0]
         else:
             return self.mdl(x)[0]
@@ -824,7 +818,7 @@ class Dual_Computation_Block(nn.Module):
                     out_channels, input_size=out_channels
                 )
 
-    def forward(self, x):
+    def forward(self, x, K, S):
         """Returns the output tensor.
 
         Arguments
@@ -842,13 +836,13 @@ class Dual_Computation_Block(nn.Module):
                K = time points in each chunk
                S = the number of chunks
         """
-        B, N, K, S = x.shape
+        B, N, _, _ = x.shape
         # intra RNN
         # [BS, K, N]
         intra = x.permute(0, 3, 2, 1).contiguous().view(B * S, K, N)
-        # [BS, K, H]
 
-        intra = self.intra_mdl(intra)
+        # [BS, K, N]
+        intra = self.intra_mdl(intra, K)
 
         # [BS, K, N]
         if self.linear_layer_after_inter_intra:
@@ -869,7 +863,7 @@ class Dual_Computation_Block(nn.Module):
         # [BK, S, N]
         inter = intra.permute(0, 2, 3, 1).contiguous().view(B * K, S, N)
         # [BK, S, N]
-        inter = self.inter_mdl(inter)
+        inter = self.inter_mdl(inter, S)
 
         # [BK, S, N]
         if self.linear_layer_after_inter_intra:
@@ -937,6 +931,7 @@ class Dual_Path_Model(nn.Module):
         num_layers=1,
         norm="ln",
         K=200,
+        S=12,
         num_spks=2,
         skip_around_intra=True,
         linear_layer_after_inter_intra=True,
@@ -945,6 +940,7 @@ class Dual_Path_Model(nn.Module):
     ):
         super(Dual_Path_Model, self).__init__()
         self.K = K
+        self.S = S
         self.num_spks = num_spks
         self.num_layers = num_layers
         self.norm = select_norm(norm, in_channels, 3)
@@ -1018,7 +1014,7 @@ class Dual_Path_Model(nn.Module):
 
         # [B, N, K, S]
         for i in range(self.num_layers):
-            x = self.dual_mdl[i](x)
+            x = self.dual_mdl[i](x, self.K, self.S)
         x = self.prelu(x)
 
         # [B, N*spks, K, S]
@@ -1060,14 +1056,12 @@ class Dual_Path_Model(nn.Module):
                    N = number of filters
                    L = time points
         """
-        B, N, L = input.shape
+        B, N, L = 1, 256, 1225
         P = K // 2
         gap = K - (P + L % K) % K
-        if gap > 0:
-            pad = torch.Tensor(torch.zeros(B, N, gap)).type(input.type())
-            input = torch.cat([input, pad], dim=2)
-
-        _pad = torch.Tensor(torch.zeros(B, N, P)).type(input.type())
+        pad = torch.Tensor(torch.zeros(B, N, gap)).to(input.device)
+        input = torch.cat([input, pad], dim=2)
+        _pad = torch.Tensor(torch.zeros(B, N, P)).to(input.device)
         input = torch.cat([_pad, input, _pad], dim=2)
 
         return input, gap
